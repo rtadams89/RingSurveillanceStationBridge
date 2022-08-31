@@ -13,7 +13,7 @@ const String ssuser = "username"; //SurveillanceStation user
 const String ssuserpass = "password"; //SurveillanceStation password
 
 #define WATCHDOG_TIMEOUT_S 90
-hw_timer_t * watchDogTimer = NULL;
+hw_timer_t *watchDogTimer = NULL;
 
 unsigned long heartBeatPeriod = 60000;
 
