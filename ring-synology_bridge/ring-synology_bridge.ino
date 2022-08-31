@@ -5,17 +5,23 @@
 #include <time.h>
 #include <Arduino_JSON.h>
 
+
 const char* ssid     = "SSID"; //Wi-Fi SSID
-const char* password = "Password"; //Wi-Fi password
-const String ssServer = "synology.example.com:8443"; //SurveillanceStation address and port
-const String ssuser = "SurveillanceStationUser"; //SurveillanceStation user
-const String ssuserpass = "Password"; //SurveillanceStation password
+const char* password = "password"; //Wi-Fi password
+const String ssServer = "example.com:8443"; //SurveillanceStation address and port
+const String ssuser = "username"; //SurveillanceStation user
+const String ssuserpass = "password"; //SurveillanceStation password
+
+#define WATCHDOG_TIMEOUT_S 90
+hw_timer_t * watchDogTimer = NULL;
+
+unsigned long heartBeatPeriod = 60000;
 
 const int disarmedPin = 21; //Pin pulled low to indicate Ring is disarmed
-const int homePin = 19; //Pin pulled low to indicate Ring is armed as home
-const int awayPin = 18; //Pin pulled low to indicate Ring is armed as away
+const int homePin = 19; //Pin pulled low to indicate is armed
+const int awayPin = 18; //Pin pulled low to indicate is armed
 
-// This is the root Certificate Authority certificate associated with the Synology interface
+// This is the root Certificate Authority certificate assocaited with the Synology interface
 const char* rootCACertificate = \
                                 "-----BEGIN CERTIFICATE-----\n" \
                                 "MIIG1TCCBL2gAwIBAgIQbFWr29AHksedBwzYEZ7WvzANBgkqhkiG9w0BAQwFADCB\n" \
@@ -58,70 +64,7 @@ const char* rootCACertificate = \
                                 "-----END CERTIFICATE-----\n";
 
 String sstoken = "xxx";
-
-void setup()
-{
-  pinMode(disarmedPin, INPUT_PULLUP);
-  pinMode(homePin, INPUT_PULLUP);
-  pinMode(awayPin, INPUT_PULLUP);
-
-  Serial.begin(115200);
-
-  Serial.print("Connecting to ");
-  Serial.println(ssid);
-
-  WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-
-  Serial.println("");
-  Serial.println("WiFi connected");
-  Serial.println("IP address: ");
-  Serial.println(WiFi.localIP());
-
-  Serial.println("Setting clock");
-  setClock();
-
-  Serial.println("Startup complete");
-}
-
-void loop() {
-  if (digitalRead(disarmedPin) == LOW && ss_home_mode_is_active() == false)
-  {
-    Serial.println(F("Turning home mode on..."));
-    JSONVar JSONobject = JSON.parse(getHTTPPayload("https://" + ssServer + "/webapi/entry.cgi?api=SYNO.SurveillanceStation.HomeMode&version=1&method=Switch&on=true&_sid=" + sstoken));
-
-    if ((boolean)JSONobject["success"] == true) {
-      Serial.println(F("Home mode turned on successfully"));
-      delay(10000);
-    }
-    else {
-      Serial.println(F("Error turning home mode on. Sleeping for 5 minutes..."));
-      delay(300000);
-    }
-
-  }
-
-
-  if ((digitalRead(homePin) == LOW || digitalRead(awayPin) == LOW) && ss_home_mode_is_active() == true)
-  {
-    Serial.println("Turning home mode off...");
-    JSONVar JSONobject = JSON.parse(getHTTPPayload("https://" + ssServer + "/webapi/entry.cgi?api=SYNO.SurveillanceStation.HomeMode&version=1&method=Switch&on=false&_sid=" + sstoken));
-
-    if ((boolean)JSONobject["success"] == true) {
-      Serial.println(F("Home mode turned off successfully"));
-      delay(10000);
-    }
-    else {
-      Serial.println(F("Error turning home mode off. Sleeping for 5 minutes..."));
-      delay(300000);
-    }
-  }
-
-}
-
+unsigned long last_report = (heartBeatPeriod + 1);
 
 void setClock() {
   configTime(0, 0, "pool.ntp.org");
@@ -177,8 +120,8 @@ void get_ss_token () {
     sstoken = (const char*) JSONobject["data"]["sid"];
   }
   else {
-    Serial.println(F("SS authentication error. Sleeping for 5 minutes..."));
-    delay(300000);
+    Serial.println(F("SS authentication error. Sleeping for 1 minute..."));
+    delay(60000);
   }
 
 }
@@ -229,11 +172,13 @@ String getHTTPPayload (String url) {
           }
         } else {
           Serial.printf("[HTTPS] GET... failed, error: %s\n", https.errorToString(httpCode).c_str());
+          return F("[HTTPS] GET... failed");
         }
 
         https.end();
       } else {
-        Serial.println(F("[HTTPS] Unable to connect\n"));
+        Serial.println(F("[HTTPS] Error Unable to connect\n"));
+        return F("[HTTPS] Error Unable to connect\n");
       }
 
       // End extra scoping block
@@ -241,7 +186,109 @@ String getHTTPPayload (String url) {
 
     delete client;
   } else {
-    Serial.println(F("Unable to create client"));
+    Serial.println(F("Error: Unable to create client"));
+    return F("Error: Unable to create client");
+  }
+  return F("End of function reached");
+}
+
+void IRAM_ATTR watchDogInterrupt() {
+  Serial.println(F("Watch Dog Rebooting"));
+  ESP.restart();
+}
+
+
+void watchDogRefresh()
+{
+  timerWrite(watchDogTimer, 0);                    //reset timer (feed watchdog)
+}
+
+
+void setup()
+{
+  delay(2000);
+
+  watchDogTimer = timerBegin(2, 80, true);
+  timerAttachInterrupt(watchDogTimer, &watchDogInterrupt, true);
+  timerAlarmWrite(watchDogTimer, WATCHDOG_TIMEOUT_S * 1000000, false);
+  timerAlarmEnable(watchDogTimer);
+
+  pinMode(disarmedPin, INPUT_PULLUP);
+  pinMode(homePin, INPUT_PULLUP);
+  pinMode(awayPin, INPUT_PULLUP);
+
+  Serial.begin(115200);
+
+  Serial.print(F("Connecting to "));
+  Serial.println(ssid);
+
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
   }
 
+  Serial.println("");
+  Serial.println(F("WiFi connected"));
+  Serial.println(F("IP address: "));
+  Serial.println(WiFi.localIP());
+
+  Serial.println(F("Setting clock"));
+  setClock();
+
+  Serial.println(F("RingSynologyBridge booted"));
+
+}
+
+void loop() {
+
+  while (WiFi.status() != WL_CONNECTED) {
+    Serial.println("Reconnecting to WiFi...");
+    WiFi.disconnect();
+    delay(1000);
+    WiFi.reconnect();
+    delay(1000);
+  }
+
+
+  if (millis() - last_report > heartBeatPeriod) {
+    Serial.println(F("RingSynologyBridge Heartbeat"));
+    last_report = millis();
+  }
+
+
+  if (digitalRead(disarmedPin) == LOW && ss_home_mode_is_active() == false)
+  {
+    Serial.println(F("Turning home mode on..."));
+    JSONVar JSONobject = JSON.parse(getHTTPPayload("https://" + ssServer + "/webapi/entry.cgi?api=SYNO.SurveillanceStation.HomeMode&version=1&method=Switch&on=true&_sid=" + sstoken));
+
+    if ((boolean)JSONobject["success"] == true) {
+      Serial.println(F("Home mode turned on succesfully"));
+      delay(7500);
+      Serial.println(F("Monitoring for changes again"));
+    }
+    else {
+      Serial.println(F("Error turning home mode on. Sleeping for 1 minute..."));
+      delay(60000);
+    }
+
+  }
+
+
+  if ((digitalRead(homePin) == LOW || digitalRead(awayPin) == LOW) && ss_home_mode_is_active() == true)
+  {
+    Serial.println(F("Turning home mode off..."));
+    JSONVar JSONobject = JSON.parse(getHTTPPayload("https://" + ssServer + "/webapi/entry.cgi?api=SYNO.SurveillanceStation.HomeMode&version=1&method=Switch&on=false&_sid=" + sstoken));
+
+    if ((boolean)JSONobject["success"] == true) {
+      Serial.println(F("Home mode turned off succesfully"));
+      delay(7500);
+      Serial.println(F("Monitoring for changes again"));
+    }
+    else {
+      Serial.println(F("Error turning home mode off. Sleeping for 1 minute..."));
+      delay(60000);
+    }
+  }
+  watchDogRefresh();
 }
