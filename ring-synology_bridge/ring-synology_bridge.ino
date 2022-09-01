@@ -4,6 +4,7 @@
 #include <WiFiClientSecure.h>
 #include <time.h>
 #include <Arduino_JSON.h>
+#include <esp_task_wdt.h>
 
 
 const char* ssid     = "SSID"; //Wi-Fi SSID
@@ -12,8 +13,7 @@ const String ssServer = "example.com:8443"; //SurveillanceStation address and po
 const String ssuser = "username"; //SurveillanceStation user
 const String ssuserpass = "password"; //SurveillanceStation password
 
-#define WATCHDOG_TIMEOUT_S 90
-hw_timer_t *watchDogTimer = NULL;
+#define WDT_TIMEOUT 90
 
 unsigned long heartBeatPeriod = 60000;
 
@@ -144,74 +144,52 @@ bool ss_token_is_valid () {
 
 String getHTTPPayload (String url) {
 
+  String payload = "";
 
   WiFiClientSecure *client = new WiFiClientSecure;
   if (client) {
     client -> setCACert(rootCACertificate);
 
     {
-      // Add a scoping block for HTTPClient https to make sure it is destroyed before WiFiClientSecure *client is
       HTTPClient https;
 
-      //Serial.print("[HTTPS] begin...\n");
-      if (https.begin(*client, url)) {  // HTTPS
-        // Serial.print("[HTTPS] GET...\n");
-        // start connection and send HTTP header
+      if (https.begin(*client, url)) {
         int httpCode = https.GET();
 
         // httpCode will be negative on error
         if (httpCode > 0) {
-          // HTTP header has been send and Server response header has been handled
-          // Serial.printf("[HTTPS] GET... code: %d\n", httpCode);
 
           // file found at server
           if (httpCode == HTTP_CODE_OK || httpCode == HTTP_CODE_MOVED_PERMANENTLY) {
-            String payload = https.getString();
-            // Serial.println(payload);
-            return payload;
+            payload = https.getString();
           }
         } else {
           Serial.printf("[HTTPS] GET... failed, error: %s\n", https.errorToString(httpCode).c_str());
-          return F("[HTTPS] GET... failed");
+          payload = F("Error: Get failes");
         }
 
         https.end();
       } else {
         Serial.println(F("[HTTPS] Error Unable to connect\n"));
-        return F("[HTTPS] Error Unable to connect\n");
+        payload = F("Error: Unable to connect");
       }
 
-      // End extra scoping block
     }
 
     delete client;
   } else {
     Serial.println(F("Error: Unable to create client"));
-    return F("Error: Unable to create client");
+    payload = F("Error: Unable to create client");
   }
-  return F("End of function reached");
+  return payload;
 }
-
-void IRAM_ATTR watchDogInterrupt() {
-  Serial.println(F("Watch Dog Rebooting"));
-  ESP.restart();
-}
-
-
-void watchDogRefresh()
-{
-  timerWrite(watchDogTimer, 0);                    //reset timer (feed watchdog)
-}
-
 
 void setup()
 {
   delay(2000);
 
-  watchDogTimer = timerBegin(2, 80, true);
-  timerAttachInterrupt(watchDogTimer, &watchDogInterrupt, true);
-  timerAlarmWrite(watchDogTimer, WATCHDOG_TIMEOUT_S * 1000000, false);
-  timerAlarmEnable(watchDogTimer);
+  esp_task_wdt_init(WDT_TIMEOUT, true); //enable panic so ESP32 restarts
+  esp_task_wdt_add(NULL); //add current thread to WDT watch
 
   pinMode(disarmedPin, INPUT_PULLUP);
   pinMode(homePin, INPUT_PULLUP);
@@ -253,6 +231,8 @@ void loop() {
 
   if (millis() - last_report > heartBeatPeriod) {
     Serial.println(F("RingSynologyBridge Heartbeat"));
+    Serial.print(F("MinFreeHeap="));
+    Serial.println(ESP.getMinFreeHeap());
     last_report = millis();
   }
 
@@ -290,5 +270,5 @@ void loop() {
       delay(60000);
     }
   }
-  watchDogRefresh();
+  esp_task_wdt_reset();
 }
