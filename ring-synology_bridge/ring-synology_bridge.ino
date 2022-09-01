@@ -22,7 +22,7 @@ const int disarmedPin = 21; //Pin pulled low to indicate Ring is disarmed
 const int homePin = 19; //Pin pulled low to indicate is armed
 const int awayPin = 18; //Pin pulled low to indicate is armed
 
-// This is the root Certificate Authority certificate assocaited with the Synology interface
+// This is the root Certificate Authority certificate associated with the Synology interface
 const char* rootCACertificate = \
                                 "-----BEGIN CERTIFICATE-----\n" \
                                 "MIIG1TCCBL2gAwIBAgIQbFWr29AHksedBwzYEZ7WvzANBgkqhkiG9w0BAQwFADCB\n" \
@@ -244,7 +244,7 @@ void loop() {
     JSONVar JSONobject = JSON.parse(getHTTPPayload("https://" + ssServer + "/webapi/entry.cgi?api=SYNO.SurveillanceStation.HomeMode&version=1&method=Switch&on=true&_sid=" + sstoken));
 
     if ((boolean)JSONobject["success"] == true) {
-      Serial.println(F("Home mode turned on succesfully"));
+      Serial.println(F("Home mode turned on successfully"));
       delay(7500);
       Serial.println(F("Monitoring for changes again"));
     }
@@ -262,7 +262,7 @@ void loop() {
     JSONVar JSONobject = JSON.parse(getHTTPPayload("https://" + ssServer + "/webapi/entry.cgi?api=SYNO.SurveillanceStation.HomeMode&version=1&method=Switch&on=false&_sid=" + sstoken));
 
     if ((boolean)JSONobject["success"] == true) {
-      Serial.println(F("Home mode turned off succesfully"));
+      Serial.println(F("Home mode turned off successfully"));
       delay(7500);
       Serial.println(F("Monitoring for changes again"));
     }
