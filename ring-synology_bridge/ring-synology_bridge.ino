@@ -5,14 +5,14 @@
 #include <time.h>
 #include <Arduino_JSON.h>
 #include <esp_task_wdt.h>
-#include <arduino_secrets.h>
+#include <secrets.h>
 
 
-const char* ssid = SECRET_SSID
-const char* password = SECRET_PASSWORD
-const String ssServer = SECRET_SSSERVER
-const String ssuser = SECRET_SSUSER
-const String ssuserpass = SECRET_SSUSERPASS
+const char* ssid = SECRET_SSID;
+const char* password = SECRET_PASSWORD;
+const String ssServer = SECRET_SSSERVER;
+const String ssuser = SECRET_SSUSER;
+const String ssuserpass = SECRET_SSUSERPASS;
 
 #define WDT_TIMEOUT 90
 
