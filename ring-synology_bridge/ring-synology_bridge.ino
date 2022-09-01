@@ -5,13 +5,14 @@
 #include <time.h>
 #include <Arduino_JSON.h>
 #include <esp_task_wdt.h>
+#include <arduino_secrets.h>
 
 
-const char* ssid     = "SSID"; //Wi-Fi SSID
-const char* password = "password"; //Wi-Fi password
-const String ssServer = "example.com:8443"; //SurveillanceStation address and port
-const String ssuser = "username"; //SurveillanceStation user
-const String ssuserpass = "password"; //SurveillanceStation password
+const char* ssid = SECRET_SSID
+const char* password = SECRET_PASSWORD
+const String ssServer = SECRET_SSSERVER
+const String ssuser = SECRET_SSUSER
+const String ssuserpass = SECRET_SSUSERPASS
 
 #define WDT_TIMEOUT 90
 
